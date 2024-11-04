@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Selector de Bombas Barnes</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .input-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        input, select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .chart-container {
+            margin-top: 20px;
+            height: 400px;
+        }
+        .recommended {
+            background-color: #d4edda;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Selector de Bombas Barnes</h1>
+        <div class="input-section">
+            <div class="input-group">
+                <label for="caudal">Caudal requerido (m³/h):</label>
+                <input type="number" id="caudal" min="0" step="0.1" required>
+            </div>
+            <div class="input-group">
+                <label for="altura">Altura total (m):</label>
+                <input type="number" id="altura" min="0" step="0.1" required>
+            </div>
+            <div class="input-group">
+                <label for="serie">Serie de bomba:</label>
+                <select id="serie">
+                    <option value="HE">HE - Alta Eficiencia</option>
+                    <option value="KE">KE - Uso General</option>
+                    <option value="IB">IB - Industrial</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label for="temperatura">Temperatura del fluido (°C):</label>
+                <input type="number" id="temperatura" value="20" min="-10" max="90">
+            </div>
+        </div>
+        <button onclick="seleccionarBomba()">Seleccionar Bomba</button>
+        <div class="results" id="results" style="display: none;">
+            <h2>Resultados de la Selección</h2>
+            <div id="recommended" class="recommended"></div>
+            <div class="chart-container">
+                <canvas id="curvasChart"></canvas>
+            </div>
+            <table id="resultsTable">
+                <thead>
+                    <tr>
+                        <th>Modelo</th>
+                        <th>Caudal (m³/h)</th>
+                        <th>Altura (m)</th>
+                        <th>Eficiencia (%)</th>
+                        <th>NPSH requerido (m)</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Datos de las bombas (ampliado con más modelos)
+        const bombasData = {
+            HE: {
+                "HE 1-0.75": {
+                    curvaCaudal: [0, 10, 20, 30, 40],
+                    curvaAltura: [35, 33, 30, 26, 21],
+                    curvaEficiencia: [0, 40, 60, 55, 45],
+                    npshRequerido: 2.3,
+                    potencia: 0.75
+                },
+                "HE 1.5-1": {
+                    curvaCaudal: [0, 20, 40, 60, 80, 100],
+                    curvaAltura: [45, 43, 40, 36, 31, 25],
+                    curvaEficiencia: [0, 45, 65, 60, 50, 35],
+                    npshRequerido: 2.5,
+                    potencia: 1.5
+                },
+                "HE 2-1.5": {
+                    curvaCaudal: [0, 20, 40, 60, 80, 100],
+                    curvaAltura: [52, 50, 47, 43, 38, 32],
+                    curvaEficiencia: [0, 48, 67, 62, 52, 38],
+                    npshRequerido: 2.8,
+                    potencia: 2
+                },
+                "HE 3-2.5": {
+                    curvaCaudal: [0, 20, 40, 60, 80, 100, 120],
+                    curvaAltura: [60, 58, 55, 51, 46, 40, 33],
+                    curvaEficiencia: [0, 50, 70, 65, 55, 45, 35],
+                    npshRequerido: 3.0,
+                    potencia: 3
+                },
+                "HE 5-4": {
+                    curvaCaudal: [0, 25, 50, 75, 100, 125],
+                    curvaAltura: [70, 68, 65, 60, 54, 47],
+                    curvaEficiencia: [0, 55, 75, 70, 60, 45],
+                    npshRequerido: 3.5,
+                    potencia: 5
+                },
+                "HE 7.5-5": {
+                    curvaCaudal: [0, 30, 60, 90, 120, 150],
+                    curvaAltura: [85, 82, 78, 73, 67, 60],
+                    curvaEficiencia: [0, 60, 80, 75, 65, 50],
+                    npshRequerido: 4.0,
+                    potencia: 7.5
+                }
+            },
+            KE: {
+                "KE 0.5-0.33": {
+                    curvaCaudal: [0, 5, 10, 15, 20],
+                    curvaAltura: [15, 14, 12, 10, 7],
+                    curvaEficiencia: [0, 35, 50, 45, 35],
+                    npshRequerido: 1.8,
+                    potencia: 0.5
+                },
+                "KE 1-0.5": {
+                    curvaCaudal: [0, 10, 20, 30, 40, 50],
+                    curvaAltura: [25, 23, 21, 18, 15, 12],
+                    curvaEficiencia: [0, 40, 55, 50, 45, 35],
+                    npshRequerido: 2.0,
+                    potencia: 1
+                },
+                "KE 2-1.5": {
+                    curvaCaudal: [0, 10, 20, 30, 40, 50, 60],
+                    curvaAltura: [42, 40, 38, 35, 32, 29, 25],
+                    curvaEficiencia: [0, 45, 60, 55, 50, 40, 30],
+                    npshRequerido: 2.5,
+                    potencia: 2
+                },
+                "KE 3-2": {
+                    curvaCaudal: [0, 15, 30, 45, 60, 75],
+                    curvaAltura: [50, 48, 45, 41, 36, 30],
+                    curvaEficiencia: [0, 48, 63, 58, 52, 42],
+                    npshRequerido: 2.8,
+                    potencia: 3
+                },
+                "KE 5-3": {
+                    curvaCaudal: [0, 20, 40, 60, 80, 100],
+                    curvaAltura: [65, 62, 58, 53, 47, 40],
+                    curvaEficiencia: [0, 52, 67, 62, 55, 45],
+                    npshRequerido: 3.2,
+                    potencia: 5
+                }
+            },
+            IB: {
+                "IB 1-0.75": {
+                    curvaCaudal: [0, 10, 20, 30, 40],
+                    curvaAltura: [40, 38, 35, 31, 26],
+                    curvaEficiencia: [0, 45, 65, 60, 50],
+                    npshRequerido: 2.5,
+                    potencia: 1
+                },
+                "IB 1.5-1": {
+                    curvaCaudal: [0, 20, 40, 60, 80, 100],
+                    curvaAltura: [55, 52, 48, 43, 37, 30],
+                    curvaEficiencia: [0, 50, 70, 65, 55, 40],
+                    npshRequerido: 3.0,
+                    potencia: 1.5
+                },
+                "IB 3-2": {
+                    curvaCaudal: [0, 20, 40, 60, 80, 100, 120],
+                    curvaAltura: [75, 72, 68, 63, 57, 50, 42],
+                    curvaEficiencia: [0, 55, 75, 70, 60, 45, 35],
+                    npshRequerido: 3.5,
+                    potencia: 3
+                },
+                "IB 5-3": {
+                    curvaCaudal: [0, 25, 50, 75, 100, 125],
+                    curvaAltura: [85, 82, 78, 73, 67, 60],
+                    curvaEficiencia: [0, 58, 78, 73, 63, 48],
+                    npshRequerido: 4.0,
+                    potencia: 5
+                },
+                "IB 7.5-4": {
+                    curvaCaudal: [0, 30, 60, 90, 120, 150],
+                    curvaAltura: [95, 92, 88, 83, 77, 70],
+                    curvaEficiencia: [0, 60, 80, 75, 65, 50],
+                    npshRequerido: 4.5,
+                    potencia: 7.5
+                }
+            }
+        };
+
+        let curvasChart = null;
+
+        function seleccionarBomba() {
+            const caudal = parseFloat(document.getElementById('caudal').value);
+            const altura = parseFloat(document.getElementById('altura').value);
+            const serie = document.getElementById('serie').value;
+            const temperatura = parseFloat(document.getElementById('temperatura').value);
+
+            if (!caudal || !altura) {
+                alert('Por favor, ingrese caudal y altura requeridos');
+                return;
+            }
+
+            // Factor de corrección por temperatura
+            const factorTemp = 1 - 0.002 * (temperatura - 20);
+
+            // Encontrar bombas adecuadas
+            const bombasAdecuadas = [];
+            const serieSeleccionada = bombasData[serie];
+
+            for (const [modelo, data] of Object.entries(serieSeleccionada)) {
+                // Interpolar altura para el caudal requerido
+                const alturaInterpolada = interpolarPunto(data.curvaCaudal, data.curvaAltura, caudal);
+                const eficienciaInterpolada = interpolarPunto(data.curvaCaudal, data.curvaEficiencia, caudal);
+
+                if (alturaInterpolada * factorTemp >= altura) {
+                    bombasAdecuadas.push({
+                        modelo,
+                        caudal,
+                        altura: alturaInterpolada * factorTemp,
+                        eficiencia: eficienciaInterpolada,
+                        npsh: data.npshRequerido,
+                        potencia: data.potencia
+                    });
+                }
+            }
+
+            mostrarResultados(bombasAdecuadas, caudal, altura, serie);
+        }
+
+        function interpolarPunto(x, y, xBuscado) {
+            if (xBuscado <= x[0]) return y[0];
+            if (xBuscado >= x[x.length - 1]) return y[y.length - 1];
+
+            for (let i = 0; i < x.length - 1; i++) {
+                if (xBuscado >= x[i] && xBuscado <= x[i + 1]) {
+                    const ratio = (xBuscado - x[i]) / (x[i + 1] - x[i]);
+                    return y[i] + ratio * (y[i + 1] - y[i]);
+                }
+            }
+            return null;
+        }
+
+        function mostrarResultados(bombas, caudalReq, alturaReq, serie) {
+    const results = document.getElementById('results');
+    const recommended = document.getElementById('recommended');
+    const tbody = document.querySelector('#resultsTable tbody');
+    
+    results.style.display = 'block';
+    tbody.innerHTML = '';
+    
+    if (bombas.length === 0) {
+        recommended.innerHTML = '<h3>No se encontraron bombas adecuadas para los requisitos dados</h3>';
+        actualizarGrafica([], caudalReq, alturaReq, serie);
+        return;
+    }
+    
+    // Ordenar bombas por eficiencia
+    bombas.sort((a, b) => b.eficiencia - a.eficiencia);
+    
+    // Mostrar recomendación
+    const mejor = bombas[0];
+    recommended.innerHTML = `
+        <h3>Bomba Recomendada: ${mejor.modelo}</h3>
+        <p>Esta bomba ofrece la mejor eficiencia (${mejor.eficiencia.toFixed(1)}%) 
+        para los requisitos dados.</p>
+        <p>Potencia: ${mejor.potencia} HP</p>
+        <p>NPSH requerido: ${mejor.npsh} m</p>
+    `;
+
+    // Llenar tabla
+    bombas.forEach(bomba => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${bomba.modelo}</td>
+            <td>${bomba.caudal.toFixed(1)}</td>
+            <td>${bomba.altura.toFixed(1)}</td>
+            <td>${bomba.eficiencia.toFixed(1)}</td>
+            <td>${bomba.npsh}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    actualizarGrafica(bombas, caudalReq, alturaReq, serie);
+}
+
+function actualizarGrafica(bombas, caudalReq, alturaReq, serie) {
+    const ctx = document.getElementById('curvasChart').getContext('2d');
+    
+    if (curvasChart) {
+        curvasChart.destroy();
+    }
+    
+    // Preparar datos para la gráfica
+    const datasets = [];
+    
+    // Crear un color aleatorio para cada curva
+    function getRandomColor() {
+        const letters = '0123456789ABCDEF';
+        let color = '#';
+        for (let i = 0; i < 6; i++) {
+            color += letters[Math.floor(Math.random() * 16)];
+        }
+        return color;
+    }
+    
+    // Añadir curvas de todas las bombas de la serie
+    Object.entries(bombasData[serie]).forEach(([modelo, data]) => {
+        const color = getRandomColor();
+        datasets.push({
+            label: modelo,
+            data: data.curvaCaudal.map((q, i) => ({
+                x: q,
+                y: data.curvaAltura[i]
+            })),
+            borderColor: color,
+            backgroundColor: color,
+            fill: false,
+            tension: 0.4
+        });
+    });
+    
+    // Añadir punto de operación requerido
+    datasets.push({
+        label: 'Punto Requerido',
+        data: [{x: caudalReq, y: alturaReq}],
+        backgroundColor: 'red',
+        borderColor: 'red',
+        pointRadius: 8,
+        pointStyle: 'circle',
+        showLine: false
+    });
+    
+    curvasChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: `Curvas Características - Serie ${serie}`
+                },
+                legend: {
+                    position: 'right'
+                }
+            },
+            scales: {
+                x: {
+                    type: 'linear',
+                    position: 'bottom',
+                    title: {
+                        display: true,
+                        text: 'Caudal (m³/h)'
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Altura (m)'
+                    }
+                }
+            }
+        }
+    });
+}
+</script>
+</body>
+</html>
